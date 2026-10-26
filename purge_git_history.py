@@ -8,6 +8,7 @@ blobs, files, and directories from any Git repository using git-filter-repo.
 Features:
 - Completely standalone: bundles git-filter-repo (no pip install or PATH setup needed).
 - Universal: Works on ANY git repository (defaults to current directory or --repo <path>).
+- Zero hardcoded paths: Fully portable across Windows, Linux, and macOS.
 - Safety-first: Verifies clean working tree, creates backup branch & full .git bundle.
 - Size reporting: Shows before & after .git folder sizes and calculated reduction.
 - Automatic remote restoration: Preserves all git remotes after filter-repo executes.
@@ -16,19 +17,20 @@ Features:
 
 Usage:
   # Inspect top 20 largest blobs in current repo:
-  python C:\\src\\git-history-purger\\purge_git_history.py --inspect
+  purge-history --inspect
+  # (or: python purge_git_history.py --inspect)
 
   # Inspect in another repo:
-  python C:\\src\\git-history-purger\\purge_git_history.py --repo /path/to/repo --inspect
+  purge-history --repo /path/to/repo --inspect
 
   # Dry-run stripping blobs bigger than 3MB:
-  python C:\\src\\git-history-purger\\purge_git_history.py --dry-run --strip-blobs-bigger 3M
+  purge-history --dry-run --strip-blobs-bigger 3M
 
   # Purge blobs bigger than 3MB and specific file types:
-  python C:\\src\\git-history-purger\\purge_git_history.py --strip-blobs-bigger 3M --purge-glob "*.pdf" "*.zip"
+  purge-history --strip-blobs-bigger 3M --purge-glob "*.pdf" "*.zip"
 
-  # Purge a specific path:
-  python C:\\src\\git-history-purger\\purge_git_history.py --purge-path results thesis temp
+  # Purge specific paths:
+  purge-history --purge-path results thesis temp
 """
 
 import argparse
@@ -199,7 +201,7 @@ def resolve_filter_repo_cmd() -> list:
     if system_tool:
         return [system_tool]
 
-    # 2. Check bundled script
+    # 2. Check bundled script relative to this file
     if BUNDLED_FILTER_REPO.exists():
         return [sys.executable, str(BUNDLED_FILTER_REPO)]
 
@@ -281,6 +283,31 @@ def run_filter_repo(repo_root: Path, filter_flags: list, dry_run: bool = False, 
     print("=" * 80 + "\n")
 
 
+def install_agent_skill():
+    """Install the git-history-purger skill into the user's Antigravity config directory."""
+    home_dir = Path.home()
+    target_skill_dir = home_dir / ".gemini" / "config" / "skills" / "git-history-purger"
+    source_skill_dir = TOOL_DIR / "skills" / "git-history-purger"
+
+    if not source_skill_dir.exists():
+        print(f"[ERROR] Source skill directory not found: {source_skill_dir}")
+        return
+
+    target_skill_dir.mkdir(parents=True, exist_ok=True)
+    # Copy SKILL.md
+    shutil.copy2(source_skill_dir / "SKILL.md", target_skill_dir / "SKILL.md")
+    # Copy scripts/
+    target_scripts_dir = target_skill_dir / "scripts"
+    target_scripts_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(TOOL_DIR / "purge_git_history.py", target_scripts_dir / "purge_git_history.py")
+    if BUNDLED_FILTER_REPO.exists():
+        shutil.copy2(BUNDLED_FILTER_REPO, target_scripts_dir / "git_filter_repo.py")
+
+    print(f"[OK] Agent skill successfully installed into:")
+    print(f"     {target_skill_dir}")
+    print("[*] All Antigravity AI agents on this machine will now automatically discover and use this tool.")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Inspect and purge large historical files/blobs from any Git repository.",
@@ -288,19 +315,23 @@ def main():
         epilog="""
 Examples:
   # Inspect largest blobs in current repository:
-  python C:\\src\\git-history-purger\\purge_git_history.py --inspect
+  purge-history --inspect
+  python purge_git_history.py --inspect
 
   # Inspect a specific repository:
-  python C:\\src\\git-history-purger\\purge_git_history.py --repo C:\\dev\\myproject --inspect
+  purge-history --repo /path/to/project --inspect
 
   # Purge blobs larger than 3MB in current repo:
-  python C:\\src\\git-history-purger\\purge_git_history.py --strip-blobs-bigger 3M
+  purge-history --strip-blobs-bigger 3M
 
   # Purge multiple file patterns:
-  python C:\\src\\git-history-purger\\purge_git_history.py --purge-glob "*.pdf" "*.pptx" "*.zip"
+  purge-history --purge-glob "*.pdf" "*.pptx" "*.zip"
 
   # Purge specific historical paths:
-  python C:\\src\\git-history-purger\\purge_git_history.py --purge-path results/ thesis/ temp/
+  purge-history --purge-path results/ thesis/ temp/
+
+  # Install skill for AI agents on this machine:
+  python purge_git_history.py --install-skill
         """,
     )
     parser.add_argument(
@@ -357,8 +388,18 @@ Examples:
         action="store_true",
         help="Skip aggressive git gc and reflog expiration after filtering.",
     )
+    parser.add_argument(
+        "--install-skill",
+        action="store_true",
+        help="Install the git-history-purger skill into ~/.gemini/config/skills/ for AI agents.",
+    )
 
     args = parser.parse_args()
+
+    # Install skill option
+    if args.install_skill:
+        install_agent_skill()
+        return
 
     repo_dir = Path(args.repo).resolve() if args.repo else Path.cwd()
     repo_root = verify_repo(repo_dir)
@@ -389,7 +430,6 @@ Examples:
         filter_flags.extend(["--path-glob", g, "--invert-paths"])
 
     if not filter_flags and args.dry_run:
-        # Default dry run demo if nothing specified
         filter_flags.extend(["--strip-blobs-bigger", "3M"])
 
     run_filter_repo(

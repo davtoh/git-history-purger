@@ -9,13 +9,30 @@ This skill guides AI agents on when and how to safely inspect, analyze, and purg
 
 ---
 
-## 📍 Tool Location & Availability
+## 📍 Dynamic Tool Resolution (Zero Hardcoded Paths)
 
-The standalone tool is located at:
-- **Primary Script**: `C:\src\git-history-purger\purge_git_history.py`
-- **Module Entry**: `python C:\src\git-history-purger [args]`
-- **PowerShell / CMD Launchers**: `C:\src\git-history-purger\purge-history.bat` / `.ps1`
-- **Bundled Engine**: `C:\src\git-history-purger\git_filter_repo.py` (v2.47.0 standalone, requires NO pip install)
+The tool is completely portable across Windows, macOS, and Linux. When executing commands, AI agents should resolve the tool in the following order:
+
+1. **System Command (Preferred)**:
+   If installed in `PATH` or virtual environment (via `pip install -e .`):
+   ```bash
+   purge-history [args]
+   ```
+2. **Skill's Bundled Script (Self-Contained)**:
+   Every installed instance of this skill contains its own scripts directory:
+   ```bash
+   python "<path-to-this-skill-dir>/scripts/purge_git_history.py" [args]
+   ```
+   *(Antigravity agents receive the exact directory path of this `SKILL.md` in the system prompt).*
+3. **Repository Standalone**:
+   If running inside or referencing the cloned `git-history-purger` repository:
+   ```bash
+   python purge_git_history.py [args]
+   # Or directory module execution:
+   python <path-to-cloned-repo> [args]
+   ```
+
+Because `git_filter_repo.py` is bundled directly alongside `purge_git_history.py`, **no `pip install` or external Git plugins are required**.
 
 ---
 
@@ -31,10 +48,10 @@ Trigger this workflow whenever:
 
 ## 🛡️ Built-in Safety Protocol
 
-`purge_git_history.py` enforces safety automatically:
+`purge_git_history.py` enforces safety automatically on the target repository:
 - **Clean Working Tree**: Aborts if uncommitted changes exist.
-- **Safety Backup Branch**: Creates `backup_history_YYYYMMDD_HHMMSS`.
-- **Full Safety Bundle**: Creates a complete `.git_backup_*.bundle` archive before rewriting history.
+- **Safety Backup Branch**: Automatically creates `backup_history_YYYYMMDD_HHMMSS`.
+- **Full Safety Bundle**: Automatically creates a complete `.git_backup_*.bundle` archive before rewriting history.
 - **Automatic Remote Restoration**: Preserves and re-attaches remote origin post-filtering.
 - **Immediate GC**: Automatically executes `git reflog expire --expire=now --all && git gc --prune=now --aggressive` to reclaim disk space immediately.
 
@@ -47,8 +64,9 @@ Follow these steps sequentially when helping a user curate a repository:
 ### Step 1: Diagnose & Inspect
 Always begin with a non-destructive scan of the largest objects in the repository:
 
-```powershell
-python C:\src\git-history-purger\purge_git_history.py --inspect --top 15
+```bash
+purge-history --inspect --top 15
+# Or: python "<skill-dir>/scripts/purge_git_history.py" --inspect --top 15
 ```
 *(If operating from outside the target repository, add `--repo <PATH>`)*
 
@@ -63,17 +81,17 @@ Based on the inspection output, select the appropriate filter strategy:
 ### Step 3: Run Simulation (Dry-Run)
 Demonstrate safety to the user by running a dry-run first:
 
-```powershell
-python C:\src\git-history-purger\purge_git_history.py --dry-run --strip-blobs-bigger 3M
+```bash
+purge-history --dry-run --strip-blobs-bigger 3M
 ```
 
 ### Step 4: Execute the History Purge
 Run the command against the target repository:
 
-```powershell
-python C:\src\git-history-purger\purge_git_history.py `
-  --strip-blobs-bigger 3M `
-  --purge-path results/ thesis/ `
+```bash
+purge-history \
+  --strip-blobs-bigger 3M \
+  --purge-path results/ thesis/ \
   --purge-glob "*.pdf" "*.pptx" "*.zip"
 ```
 
@@ -109,10 +127,10 @@ git pull .git_backup_YYYYMMDD_HHMMSS.bundle main
 When moving to another machine:
 1. Clone the repository:
    ```bash
-   git clone https://github.com/davtoh/git-history-purger.git C:\src\git-history-purger
+   git clone https://github.com/davtoh/git-history-purger.git
    ```
-2. Copy or symlink this skill file to the user's Antigravity config directory:
-   ```powershell
-   Copy-Item -Path C:\src\git-history-purger\skills\git-history-purger\SKILL.md -Destination ~/.gemini/config/skills/git-history-purger/SKILL.md -Force
+2. Install the skill into Antigravity with a single command:
+   ```bash
+   python git-history-purger/purge_git_history.py --install-skill
    ```
-3. The tool is ready immediately on the new machine with standard Python 3.
+   *(Or optionally install as a global CLI command: `pip install -e ./git-history-purger`)*
