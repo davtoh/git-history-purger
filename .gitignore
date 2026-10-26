@@ -1,0 +1,14 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Git safety bundles
+*.bundle
+.git_backup_*
+
+# IDEs & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
